@@ -438,23 +438,6 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
 
     override fun onDetachedFromActivityForConfigChanges() {}
 
-    fun connect() {
-        try {
-            val switchTechnology = { target: TagTechnology, other: TagTechnology? ->
-                if (!target.isConnected) {
-                    // close previously connected technology
-                    if (other !== null && other.isConnected) {
-                        other.close()
-                    }
-                    target.connect()
-                }
-            }
-        } catch (e) {
-            Log.e(TAG, "Token connect error:", e)
-        }
-    }
-
-
     private fun pollTag(nfcAdapter: NfcAdapter, result: Result, timeout: Int, technologies: Int) {
 
         pollingTimeoutTask = Timer().schedule(timeout.toLong()) {
