@@ -286,6 +286,10 @@ class FlutterNfcKit {
         .firstWhere((it) => it.toString() == "NFCAvailability.$availability");
   }
 
+  static Future<bool> connect() async {
+    return await _channel.invokeMethod('connect');
+  }
+
   /// Try to poll a NFC tag from reader.
   ///
   /// If tag is successfully polled, a session is started.
@@ -512,9 +516,5 @@ class FlutterNfcKit {
   /// Returns data in [Uint8List].
   static Future<Uint8List> readSector(int index) async {
     return await _channel.invokeMethod('readSector', {'index': index});
-  }
-
-  static Future<bool> connect() async {
-    return await _channel.invokeMethod('connect');
   }
 }
