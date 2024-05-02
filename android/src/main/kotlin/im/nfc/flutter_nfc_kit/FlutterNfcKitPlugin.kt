@@ -118,6 +118,25 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 }
             }
 
+            "isConnected" -> {
+                try {
+                    val tagTech = tagTechnology
+                    if (tagTech != null && tagTech.isConnected) {
+                        result.success(true)
+                        return
+                    }
+                    val ndefTech = ndefTechnology
+                    if (ndefTech != null && ndefTech.isConnected) {
+                        result.success(true)
+                        return
+                    }
+                    result.success(false) // Neither technology is connected
+                } catch (ex: Exception) {
+                    Log.e(TAG, "isConnected error: ", ex)
+                    result.error("ERROR", "Failed to check connection status", null)
+                }
+            }
+
             "finish" -> {
                 pollingTimeoutTask?.cancel()
                 thread {
