@@ -514,7 +514,7 @@ class FlutterNfcKit {
     return await _channel.invokeMethod('readSector', {'index': index});
   }
 
-  static Future<Uint8List> isConnected(int index) async {
-    return await _channel.invokeMethod('isConnected', {'index': index});
+  static Future<bool> isConnected() async {
+    return await _channel.invokeMethod('isConnected');
   }
 }
