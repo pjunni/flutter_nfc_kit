@@ -286,6 +286,13 @@ class FlutterNfcKit {
         .firstWhere((it) => it.toString() == "NFCAvailability.$availability");
   }
 
+  /// Connects to the currently polled NFC tag.
+  ///
+  /// Returns true if the connection is successful, false otherwise.
+  static Future<bool> connect() async {
+    return await _channel.invokeMethod('connect');
+  }
+
   /// Try to poll a NFC tag from reader.
   ///
   /// If tag is successfully polled, a session is started.

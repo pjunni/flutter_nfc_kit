@@ -14,5 +14,4 @@ build/
 
 doc
 pubspec.lock
-!example/pubspec.lock
-
+example/*

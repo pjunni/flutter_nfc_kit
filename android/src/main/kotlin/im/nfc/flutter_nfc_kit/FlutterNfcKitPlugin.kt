@@ -320,7 +320,23 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 }
             }
 
-            /// MIFARE/NTAG-related methods below
+            "connect" -> {
+                val tagTech = tagTechnology
+                if (tagTech == null) {
+                    result.error("406", "No tag polled", null)
+                    return
+                }
+                thread {
+                    try {
+                        tagTech.connect()
+                        result.success(true)
+                    } catch (ex: IOException) {
+                        Log.e(TAG, "Connect error", ex)
+                        result.error("500", "Connect error", ex.localizedMessage)
+                    }
+                }
+            }
+
             "authenticateSector" -> {
                 val tagTech = tagTechnology
                 if (tagTech == null || mifareInfo == null || mifareInfo!!.sectorCount == null) {
@@ -337,6 +353,9 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 thread {
                     try {
                         val tag = tagTech as MifareClassic
+                        if (!tag.isConnected) {
+                            tag.connect()
+                        }
                         // key A takes precedence if present
                         val success = if (keyA != null) {
                             val (key, _) = canonicalizeData(keyA)
@@ -350,7 +369,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                         }
                         result.success(success)
                     } catch (ex: IOException) {
-                        Log.e(TAG, "Authenticate block error", ex)
+                        Log.e(TAG, "Authenticate sector error", ex)
                         result.error("500", "Authentication error", ex.localizedMessage)
                     }
                 }
