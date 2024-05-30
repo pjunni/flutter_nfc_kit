@@ -5,7 +5,7 @@ dart_dir = '../lib'
 kotlin_dir = '../android/src/main/kotlin/im/nfc/flutter_nfc_kit'
 
 # Set the path to the output file
-output_file = 'all_files.txt'
+output_file = 'all_flutter_nfc_kit_files.txt'
 
 # Open the output file in write mode
 with open(output_file, 'w') as f:
