@@ -48,7 +48,8 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 try {
                     val timeoutMethod = this.javaClass.getMethod("setTimeout", Int::class.java)
                     timeoutMethod.invoke(this, timeout)
-                } catch (_: Throwable) {}
+                } catch (_: Throwable) {
+                }
             }
             val transceiveMethod = this.javaClass.getMethod("transceive", ByteArray::class.java)
             return transceiveMethod.invoke(this, data) as ByteArray
@@ -218,7 +219,8 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                         val parsedMessages = mutableListOf<Map<String, String>>()
                         if (message != null) {
                             for (record in message.records) {
-                                parsedMessages.add(mapOf(
+                                parsedMessages.add(
+                                    mapOf(
                                         "identifier" to record.id.toHexString(),
                                         "payload" to record.payload.toHexString(),
                                         "type" to record.type.toHexString(),
@@ -231,7 +233,8 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                                             NdefRecord.TNF_UNCHANGED -> "unchanged"
                                             else -> "unknown"
                                         }
-                                ))
+                                    )
+                                )
                             }
                         }
                         result.success(JSONArray(parsedMessages).toString())
@@ -264,18 +267,18 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                         val records = Array(recordData.length(), init = { i: Int ->
                             val record: JSONObject = recordData.get(i) as JSONObject
                             NdefRecord(
-                                    when (record.getString("typeNameFormat")) {
-                                        "absoluteURI" -> NdefRecord.TNF_ABSOLUTE_URI
-                                        "empty" -> NdefRecord.TNF_EMPTY
-                                        "nfcExternal" -> NdefRecord.TNF_EXTERNAL_TYPE
-                                        "nfcWellKnown" -> NdefRecord.TNF_WELL_KNOWN
-                                        "media" -> NdefRecord.TNF_MIME_MEDIA
-                                        "unchanged" -> NdefRecord.TNF_UNCHANGED
-                                        else -> NdefRecord.TNF_UNKNOWN
-                                    },
-                                    record.getString("type").hexToBytes(),
-                                    record.getString("identifier").hexToBytes(),
-                                    record.getString("payload").hexToBytes()
+                                when (record.getString("typeNameFormat")) {
+                                    "absoluteURI" -> NdefRecord.TNF_ABSOLUTE_URI
+                                    "empty" -> NdefRecord.TNF_EMPTY
+                                    "nfcExternal" -> NdefRecord.TNF_EXTERNAL_TYPE
+                                    "nfcWellKnown" -> NdefRecord.TNF_WELL_KNOWN
+                                    "media" -> NdefRecord.TNF_MIME_MEDIA
+                                    "unchanged" -> NdefRecord.TNF_UNCHANGED
+                                    else -> NdefRecord.TNF_UNKNOWN
+                                },
+                                record.getString("type").hexToBytes(),
+                                record.getString("identifier").hexToBytes(),
+                                record.getString("payload").hexToBytes()
                             )
                         })
                         // write NDEF message
@@ -384,7 +387,11 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 val index = call.argument<Int>("index")!!
                 val maxBlock = mifareInfo!!.blockCount
                 if (index !in 0 until maxBlock) {
-                    result.error("400", "Invalid block/page index $index, should be in (0, $maxBlock)", null)
+                    result.error(
+                        "400",
+                        "Invalid block/page index $index, should be in (0, $maxBlock)",
+                        null
+                    )
                     return
                 }
                 thread {
@@ -407,7 +414,11 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 val index = call.argument<Int>("index")!!
                 val maxSector = mifareInfo!!.sectorCount!!
                 if (index !in 0 until maxSector) {
-                    result.error("400", "Invalid sector index $index, should be in (0, $maxSector)", null)
+                    result.error(
+                        "400",
+                        "Invalid sector index $index, should be in (0, $maxSector)",
+                        null
+                    )
                     return
                 }
                 thread {
@@ -417,7 +428,8 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                         result.success(tag.readSector(index))
                     } catch (ex: IOException) {
                         Log.e(TAG, "Read sector error", ex)
-                        result.error("500", "Communication error", ex.localizedMessage)                    }
+                        result.error("500", "Communication error", ex.localizedMessage)
+                    }
                 }
             }
 
@@ -430,7 +442,11 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 val index = call.argument<Int>("index")!!
                 val maxBlock = mifareInfo!!.blockCount
                 if (index !in 0 until maxBlock) {
-                    result.error("400", "Invalid block/page index $index, should be in (0, $maxBlock)", null)
+                    result.error(
+                        "400",
+                        "Invalid block/page index $index, should be in (0, $maxBlock)",
+                        null
+                    )
                     return
                 }
                 val data = call.argument<Any>("data")
@@ -440,7 +456,11 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 }
                 val (bytes, _) = canonicalizeData(data)
                 if (bytes.size != mifareInfo!!.blockSize) {
-                    result.error("400", "Invalid data size ${bytes.size}, should be ${mifareInfo!!.blockSize}", null)
+                    result.error(
+                        "400",
+                        "Invalid data size ${bytes.size}, should be ${mifareInfo!!.blockSize}",
+                        null
+                    )
                     return
                 }
                 thread {
@@ -530,6 +550,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                         tagTechnology = isoDep
                         historicalBytes = isoDep.historicalBytes.toHexString()
                     }
+
                     tag.techList.contains(MifareClassic::class.java.name) -> {
                         standard = "ISO 14443-3 (Type A)"
                         type = "mifare_classic"
@@ -544,6 +565,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                             )
                         }
                     }
+
                     tag.techList.contains(MifareUltralight::class.java.name) -> {
                         standard = "ISO 14443-3 (Type A)"
                         type = "mifare_ultralight"
@@ -552,6 +574,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                             mifareInfo = MifareInfo.fromUltralight(this.type)
                         }
                     }
+
                     else -> {
                         standard = "ISO 14443-3 (Type A)"
                         type = "unknown"
@@ -601,35 +624,41 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 ndefCapacity = ndefTag.maxSize
             }
 
-            val jsonResult = JSONObject(mapOf(
-                "type" to type,
-                "id" to id,
-                "standard" to standard,
-                "atqa" to atqa,
-                "sak" to sak,
-                "historicalBytes" to historicalBytes,
-                "protocolInfo" to protocolInfo,
-                "applicationData" to applicationData,
-                "hiLayerResponse" to hiLayerResponse,
-                "manufacturer" to manufacturer,
-                "systemCode" to systemCode,
-                "dsfId" to dsfId,
-                "ndefAvailable" to ndefAvailable,
-                "ndefType" to ndefType,
-                "ndefWritable" to ndefWritable,
-                "ndefCanMakeReadOnly" to ndefCanMakeReadOnly,
-                "ndefCapacity" to ndefCapacity,
-            ))
+            val jsonResult = JSONObject(
+                mapOf(
+                    "type" to type,
+                    "id" to id,
+                    "standard" to standard,
+                    "atqa" to atqa,
+                    "sak" to sak,
+                    "historicalBytes" to historicalBytes,
+                    "protocolInfo" to protocolInfo,
+                    "applicationData" to applicationData,
+                    "hiLayerResponse" to hiLayerResponse,
+                    "manufacturer" to manufacturer,
+                    "systemCode" to systemCode,
+                    "dsfId" to dsfId,
+                    "ndefAvailable" to ndefAvailable,
+                    "ndefType" to ndefType,
+                    "ndefWritable" to ndefWritable,
+                    "ndefCanMakeReadOnly" to ndefCanMakeReadOnly,
+                    "ndefCapacity" to ndefCapacity,
+                )
+            )
 
             if (mifareInfo != null) {
                 with(mifareInfo!!) {
-                    jsonResult.put("mifareInfo", JSONObject(mapOf(
-                        "type" to typeStr,
-                        "size" to size,
-                        "blockSize" to blockSize,
-                        "blockCount" to blockCount,
-                        "sectorCount" to sectorCount
-                    )))
+                    jsonResult.put(
+                        "mifareInfo", JSONObject(
+                            mapOf(
+                                "type" to typeStr,
+                                "size" to size,
+                                "blockSize" to blockSize,
+                                "blockCount" to blockCount,
+                                "sectorCount" to sectorCount
+                            )
+                        )
+                    )
                 }
             }
 
