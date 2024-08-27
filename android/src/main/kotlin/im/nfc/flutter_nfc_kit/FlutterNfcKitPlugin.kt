@@ -34,7 +34,7 @@ import kotlin.concurrent.schedule
 import kotlin.concurrent.thread
 
 class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
-    NfcAdapter.CreateNdefMessageCallback, NfcAdapter.OnNdefPushCompleteCallback {
+    NfcAdapter.CreateNdefMessageCallback {
 
     companion object {
         private val TAG = FlutterNfcKitPlugin::class.java.name
@@ -43,7 +43,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
         private var tagTechnology: TagTechnology? = null
         private var ndefTechnology: Ndef? = null
         private var mifareInfo: MifareInfo? = null
-        private var pendingP2PResult: Result? = null
+        private var pendingP2PMessage: String? = null
 
         private fun TagTechnology.transceive(data: ByteArray, timeout: Int?): ByteArray {
             if (timeout != null) {
@@ -83,27 +83,6 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
             return
         }
 
-        val ensureNDEF = {
-            if (ndefTechnology == null) {
-                if (tagTechnology == null) {
-                    result.error("406", "No tag polled", null)
-                } else {
-                    result.error("405", "NDEF not supported on current tag", null)
-                }
-                false
-            } else true
-        }
-
-        val switchTechnology = { target: TagTechnology, other: TagTechnology? ->
-            if (!target.isConnected) {
-                // close previously connected technology
-                if (other !== null && other.isConnected) {
-                    other.close()
-                }
-                target.connect()
-            }
-        }
-
         when (call.method) {
             "getNFCAvailability" -> {
                 when {
@@ -118,25 +97,6 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
                 val technologies = call.argument<Int>("technologies")!!
                 thread {
                     pollTag(nfcAdapter, result, timeout, technologies)
-                }
-            }
-
-            "isConnected" -> {
-                try {
-                    val tagTech = tagTechnology
-                    if (tagTech != null && tagTech.isConnected) {
-                        result.success(true)
-                        return
-                    }
-                    val ndefTech = ndefTechnology
-                    if (ndefTech != null && ndefTech.isConnected) {
-                        result.success(true)
-                        return
-                    }
-                    result.success(false) // Neither technology is connected
-                } catch (ex: Exception) {
-                    Log.e(TAG, "isConnected error: ", ex)
-                    result.error("ERROR", "Failed to check connection status", null)
                 }
             }
 
@@ -508,27 +468,24 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
             return
         }
         nfcAdapter?.setNdefPushMessageCallback(this, activity.get())
-        nfcAdapter?.setOnNdefPushCompleteCallback(this, activity.get())
         result.success(null)
     }
 
     private fun sendP2PMessage(message: String, result: Result) {
-        pendingP2PResult = result
+        pendingP2PMessage = message
+        result.success(null)
     }
 
     private fun stopP2P(result: Result) {
         nfcAdapter?.setNdefPushMessageCallback(null, activity.get())
-        nfcAdapter?.setOnNdefPushCompleteCallback(null, activity.get())
+        pendingP2PMessage = null
         result.success(null)
     }
 
     override fun createNdefMessage(event: NfcEvent?): NdefMessage {
-        val message = pendingP2PResult?.let {
-            val textRecord = NdefRecord.createTextRecord(null, it.toString())
-            NdefMessage(arrayOf(textRecord))
-        } ?: NdefMessage(NdefRecord.createTextRecord(null, "No message"))
-
-        return message
+        val message = pendingP2PMessage ?: "No message"
+        val ndefRecord = NdefRecord.createTextRecord(null, message)
+        return NdefMessage(arrayOf(ndefRecord))
     }
 
     override fun onNdefPushComplete(event: NfcEvent?) {
@@ -543,11 +500,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
         nfcAdapter = NfcAdapter.getDefaultAdapter(binding.activity)
     }
 
-    override fun onDetachedFromActivity() {
-        pollingTimeoutTask?.cancel()
-        pollingTimeoutTask = null
-        tagTechnology = null
-        ndefTechnology = null
+    override fun onDetachedFromActivityForConfigChanges() {
         activity.clear()
     }
 
@@ -555,7 +508,11 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
         activity = WeakReference(binding.activity)
     }
 
-    override fun onDetachedFromActivityForConfigChanges() {
+    override fun onDetachedFromActivity() {
+        pollingTimeoutTask?.cancel()
+        pollingTimeoutTask = null
+        tagTechnology = null
+        ndefTechnology = null
         activity.clear()
     }
 
