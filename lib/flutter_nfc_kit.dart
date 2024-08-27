@@ -54,6 +54,7 @@ class MifareInfo {
 
   factory MifareInfo.fromJson(Map<String, dynamic> json) =>
       _$MifareInfoFromJson(json);
+
   Map<String, dynamic> toJson() => _$MifareInfoToJson(this);
 }
 
@@ -142,6 +143,7 @@ class NFCTag {
       this.mifareInfo);
 
   factory NFCTag.fromJson(Map<String, dynamic> json) => _$NFCTagFromJson(json);
+
   Map<String, dynamic> toJson() => _$NFCTagToJson(this);
 }
 
@@ -166,6 +168,7 @@ class NDEFRawRecord {
 
   factory NDEFRawRecord.fromJson(Map<String, dynamic> json) =>
       _$NDEFRawRecordFromJson(json);
+
   Map<String, dynamic> toJson() => _$NDEFRawRecordToJson(this);
 }
 
@@ -326,7 +329,7 @@ class FlutterNfcKit {
         "More than one tags are detected, please leave only one tag and try again.",
     bool readIso14443A = true,
     bool readIso14443B = true,
-    bool readIso18092 = false,
+    bool readIso18092 = true, // Ensure this is true to enable P2P
     bool readIso15693 = true,
     bool probeWebUSBMagic = false,
   }) async {
@@ -335,9 +338,8 @@ class FlutterNfcKit {
     // hardcoded bits, corresponding to flags in android.nfc.NfcAdapter
     if (readIso14443A) technologies |= 0x1;
     if (readIso14443B) technologies |= 0x2;
-    if (readIso18092) technologies |= 0x4;
+    if (readIso18092) technologies |= 0x4; // Ensure P2P is enabled
     if (readIso15693) technologies |= 0x8;
-    // iOS can safely ignore these option bits
     if (!androidCheckNDEF) technologies |= 0x80;
     if (!androidPlatformSound) technologies |= 0x100;
     final String data = await _channel.invokeMethod('poll', {
