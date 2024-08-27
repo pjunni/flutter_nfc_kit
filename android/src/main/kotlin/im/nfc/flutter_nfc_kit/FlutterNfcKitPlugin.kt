@@ -6,6 +6,7 @@ import android.nfc.NdefMessage
 import android.nfc.NdefRecord
 import android.nfc.NfcAdapter
 import android.nfc.NfcAdapter.*
+import android.nfc.NfcEvent
 import android.nfc.tech.*
 import android.os.Handler
 import android.os.Looper
@@ -32,8 +33,8 @@ import java.util.*
 import kotlin.concurrent.schedule
 import kotlin.concurrent.thread
 
-
-class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
+class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
+    NfcAdapter.CreateNdefMessageCallback, NfcAdapter.OnNdefPushCompleteCallback {
 
     companion object {
         private val TAG = FlutterNfcKitPlugin::class.java.name
@@ -42,6 +43,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         private var tagTechnology: TagTechnology? = null
         private var ndefTechnology: Ndef? = null
         private var mifareInfo: MifareInfo? = null
+        private var pendingP2PResult: Result? = null
 
         private fun TagTechnology.transceive(data: ByteArray, timeout: Int?): ByteArray {
             if (timeout != null) {
@@ -56,8 +58,11 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         }
     }
 
+    private lateinit var channel: MethodChannel
+    private var nfcAdapter: NfcAdapter? = null
+
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-        val channel = MethodChannel(flutterPluginBinding.binaryMessenger, "flutter_nfc_kit")
+        channel = MethodChannel(flutterPluginBinding.binaryMessenger, "flutter_nfc_kit")
         channel.setMethodCallHandler(this)
     }
 
@@ -203,7 +208,6 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 }
             }
 
-            /// NDEF-related methods below
             "readNDEF" -> {
                 if (!ensureNDEF()) return
                 val ndef = ndefTechnology!!
@@ -468,20 +472,40 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                         switchTechnology(tagTech, ndefTechnology)
                         tagTech.writeBlock(index, bytes, result)
                     } catch (ex: IOException) {
-                        Log.e(TAG, "Read block error", ex)
+                        Log.e(TAG, "Write block error", ex)
                         result.error("500", "Communication error", ex.localizedMessage)
                     }
                 }
             }
 
+            "startP2P" -> {
+                startP2P(result)
+            }
+
+            "sendP2PMessage" -> {
+                val message = call.argument<String>("message")
+                if (message != null) {
+                    sendP2PMessage(message, result)
+                } else {
+                    result.error("400", "Message is required", null)
+                }
+            }
+
+            "stopP2P" -> {
+                stopP2P(result)
+            }
+
+            else -> {
+                result.notImplemented()
+            }
         }
     }
-
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {}
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = WeakReference(binding.activity)
+        nfcAdapter = NfcAdapter.getDefaultAdapter(binding.activity)
     }
 
     override fun onDetachedFromActivity() {
@@ -496,8 +520,49 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
 
     override fun onDetachedFromActivityForConfigChanges() {}
 
-    private fun pollTag(nfcAdapter: NfcAdapter, result: Result, timeout: Int, technologies: Int) {
 
+    private fun startP2P(result: Result) {
+        if (nfcAdapter == null) {
+            result.error("405", "NFC not supported", null)
+            return
+        }
+        if (nfcAdapter?.isEnabled != true) {
+            result.error("404", "NFC not enabled", null)
+            return
+        }
+        nfcAdapter?.setNdefPushMessageCallback(this, activity.get())
+        nfcAdapter?.setOnNdefPushCompleteCallback(this, activity.get())
+        result.success(null)
+    }
+
+    private fun sendP2PMessage(message: String, result: Result) {
+        pendingP2PResult = result
+        // The actual sending is handled in createNdefMessage
+    }
+
+    private fun stopP2P(result: Result) {
+        nfcAdapter?.setNdefPushMessageCallback(null, activity.get())
+        nfcAdapter?.setOnNdefPushCompleteCallback(null, activity.get())
+        result.success(null)
+    }
+
+    override fun createNdefMessage(event: NfcEvent?): NdefMessage {
+        val message = pendingP2PResult?.let {
+            val textRecord = NdefRecord.createTextRecord(null, it.toString())
+            NdefMessage(arrayOf(textRecord))
+        } ?: NdefMessage(NdefRecord.createTextRecord(null, "No message"))
+
+        return message
+    }
+
+    override fun onNdefPushComplete(event: NfcEvent?) {
+        Handler(Looper.getMainLooper()).post {
+            pendingP2PResult?.success(null)
+            pendingP2PResult = null
+        }
+    }
+
+    private fun pollTag(nfcAdapter: NfcAdapter, result: Result, timeout: Int, technologies: Int) {
         pollingTimeoutTask = Timer().schedule(timeout.toLong()) {
             try {
                 if (activity.get() != null) {
