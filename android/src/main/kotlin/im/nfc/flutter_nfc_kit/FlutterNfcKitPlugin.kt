@@ -71,7 +71,6 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
     }
 
     private fun handleMethodCall(call: MethodCall, result: Result) {
-
         if (activity.get() == null) {
             result.error("500", "Cannot call method when not attached to activity", null)
             return
@@ -106,7 +105,6 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
         }
 
         when (call.method) {
-
             "getNFCAvailability" -> {
                 when {
                     nfcAdapter == null -> result.success("not_supported")
@@ -117,7 +115,6 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
 
             "poll" -> {
                 val timeout = call.argument<Int>("timeout")!!
-                // technology and option bits are set in Dart code
                 val technologies = call.argument<Int>("technologies")!!
                 thread {
                     pollTag(nfcAdapter, result, timeout, technologies)
@@ -501,26 +498,6 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
         }
     }
 
-    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {}
-
-    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
-        activity = WeakReference(binding.activity)
-        nfcAdapter = NfcAdapter.getDefaultAdapter(binding.activity)
-    }
-
-    override fun onDetachedFromActivity() {
-        pollingTimeoutTask?.cancel()
-        pollingTimeoutTask = null
-        tagTechnology = null
-        ndefTechnology = null
-        activity.clear()
-    }
-
-    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {}
-
-    override fun onDetachedFromActivityForConfigChanges() {}
-
-
     private fun startP2P(result: Result) {
         if (nfcAdapter == null) {
             result.error("405", "NFC not supported", null)
@@ -537,7 +514,6 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
 
     private fun sendP2PMessage(message: String, result: Result) {
         pendingP2PResult = result
-        // The actual sending is handled in createNdefMessage
     }
 
     private fun stopP2P(result: Result) {
@@ -559,6 +535,38 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
         Handler(Looper.getMainLooper()).post {
             pendingP2PResult?.success(null)
             pendingP2PResult = null
+        }
+    }
+
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activity = WeakReference(binding.activity)
+        nfcAdapter = NfcAdapter.getDefaultAdapter(binding.activity)
+    }
+
+    override fun onDetachedFromActivity() {
+        pollingTimeoutTask?.cancel()
+        pollingTimeoutTask = null
+        tagTechnology = null
+        ndefTechnology = null
+        activity.clear()
+    }
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        activity = WeakReference(binding.activity)
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        activity.clear()
+    }
+
+    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {}
+
+    private fun switchTechnology(target: TagTechnology, other: TagTechnology?) {
+        if (!target.isConnected) {
+            if (other !== null && other.isConnected) {
+                other.close()
+            }
+            target.connect()
         }
     }
 
