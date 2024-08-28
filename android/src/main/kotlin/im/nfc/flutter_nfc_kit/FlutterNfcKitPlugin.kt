@@ -166,18 +166,12 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
             }
 
             "readNDEF" -> {
-                if (ndefTechnology == null) {
-                    if (tagTechnology == null) {
-                        result.error("406", "No tag polled", null)
-                    } else {
-                        result.error("405", "NDEF not supported on current tag", null)
-                    }
-                    return
-                }
+                if (!ensureNDEF()) return
                 val ndef = ndefTechnology!!
                 thread {
                     try {
                         switchTechnology(ndef, tagTechnology)
+                        // read NDEF message
                         val message: NdefMessage? = if (call.argument<Boolean>("cached")!!) {
                             ndef.cachedNdefMessage
                         } else {
@@ -219,14 +213,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
             }
 
             "writeNDEF" -> {
-                if (ndefTechnology == null) {
-                    if (tagTechnology == null) {
-                        result.error("406", "No tag polled", null)
-                    } else {
-                        result.error("405", "NDEF not supported on current tag", null)
-                    }
-                    return
-                }
+                if (!ensureNDEF()) return
                 val ndef = ndefTechnology!!
                 if (!ndef.isWritable) {
                     result.error("405", "Tag not writable", null)
@@ -235,6 +222,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
                 thread {
                     try {
                         switchTechnology(ndef, tagTechnology)
+                        // generate NDEF message
                         val jsonString = call.argument<String>("data")!!
                         val recordData = JSONArray(jsonString)
                         val records = Array(recordData.length(), init = { i: Int ->
@@ -254,6 +242,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
                                 record.getString("payload").hexToBytes()
                             )
                         })
+                        // write NDEF message
                         val message = NdefMessage(records)
                         ndef.writeNdefMessage(message)
                         result.success("")
@@ -271,14 +260,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
             }
 
             "makeNdefReadOnly" -> {
-                if (ndefTechnology == null) {
-                    if (tagTechnology == null) {
-                        result.error("406", "No tag polled", null)
-                    } else {
-                        result.error("405", "NDEF not supported on current tag", null)
-                    }
-                    return
-                }
+                if (!ensureNDEF()) return
                 val ndef = ndefTechnology!!
                 if (!ndef.isWritable) {
                     result.error("405", "Tag not writable", null)
@@ -302,21 +284,21 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
                 }
             }
 
-            "startP2P" -> {
-                startP2P(result)
-            }
-
-            "sendP2PMessage" -> {
-                val message = call.argument<String>("message")
-                if (message != null) {
-                    sendP2PMessage(message, result)
-                } else {
-                    result.error("400", "Message is required", null)
+            "connect" -> {
+                val tagTech = tagTechnology
+                if (tagTech == null) {
+                    result.error("406", "No tag polled", null)
+                    return
                 }
-            }
-
-            "stopP2P" -> {
-                stopP2P(result)
+                thread {
+                    try {
+                        tagTech.connect()
+                        result.success(true)
+                    } catch (ex: IOException) {
+                        Log.e(TAG, "Connect error", ex)
+                        result.error("500", "Connect error", ex.localizedMessage)
+                    }
+                }
             }
 
             "authenticateSector" -> {
@@ -338,6 +320,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
                         if (!tag.isConnected) {
                             tag.connect()
                         }
+                        // key A takes precedence if present
                         val success = if (keyA != null) {
                             val (key, _) = canonicalizeData(keyA)
                             tag.authenticateSectorWithKeyA(index, key)
@@ -452,6 +435,23 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
                 }
             }
 
+            "startP2P" -> {
+                startP2P(result)
+            }
+
+            "sendP2PMessage" -> {
+                val message = call.argument<String>("message")
+                if (message != null) {
+                    sendP2PMessage(message, result)
+                } else {
+                    result.error("400", "Message is required", null)
+                }
+            }
+
+            "stopP2P" -> {
+                stopP2P(result)
+            }
+
             else -> {
                 result.notImplemented()
             }
@@ -486,6 +486,13 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
         val message = pendingP2PMessage ?: "No message"
         val ndefRecord = NdefRecord.createTextRecord(null, message)
         return NdefMessage(arrayOf(ndefRecord))
+    }
+
+    override fun onNdefPushComplete(event: NfcEvent?) {
+        Handler(Looper.getMainLooper()).post {
+            pendingP2PResult?.success(null)
+            pendingP2PResult = null
+        }
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
@@ -532,21 +539,28 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
             result.error("408", "Polling tag timeout", null)
         }
 
-        val pollHandler = ReaderCallback { tag ->
+        val pollHandler = NfcAdapter.ReaderCallback { tag ->
             pollingTimeoutTask?.cancel()
 
+            // common fields
             val type: String
             val id = tag.id.toHexString()
             val standard: String
+            // ISO 14443 Type A
             var atqa = ""
             var sak = ""
+            // ISO 14443 Type B
             var protocolInfo = ""
             var applicationData = ""
+            // ISO 7816
             var historicalBytes = ""
             var hiLayerResponse = ""
+            // NFC-F / Felica
             var manufacturer = ""
             var systemCode = ""
+            // NFC-V
             var dsfId = ""
+            // NDEF
             var ndefAvailable = false
             var ndefWritable = false
             var ndefCanMakeReadOnly = false
@@ -629,6 +643,7 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
                 standard = "unknown"
             }
 
+            // detect ndef
             if (tag.techList.contains(Ndef::class.java.name)) {
                 val ndefTag = Ndef.get(tag)
                 ndefTechnology = ndefTag
@@ -689,10 +704,12 @@ class FlutterNfcKitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware,
     }
 
     private class MethodResultWrapper(result: Result) : Result {
+
         private val methodResult: Result = result
         private var hasError: Boolean = false
 
         companion object {
+            // a Handler is always thread-safe, so use a singleton here
             private val handler: Handler by lazy {
                 Handler(Looper.getMainLooper())
             }
